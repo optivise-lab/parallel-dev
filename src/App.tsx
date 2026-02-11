@@ -199,13 +199,6 @@ export default function App() {
               <Info size={16} />
             </button>
             <button
-              onClick={() => setShowSettings(true)}
-              style={{ padding: 8, borderRadius: 4, border: 'none', background: 'transparent', color: '#a6adc8', cursor: 'pointer' }}
-              title="Settings"
-            >
-              <SettingsIcon size={16} />
-            </button>
-            <button
               onClick={() => setShowCommitModal(true)}
               disabled={!activeSession || changes.length === 0}
               style={{

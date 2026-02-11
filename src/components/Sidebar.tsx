@@ -155,7 +155,7 @@ export function Sidebar({ onSessionSelect, activeSessionId, runningSessions, onS
                   {expandedRepos.has(repo.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
                 <GitBranch size={14} className="text-accent-blue shrink-0" />
-                <span className="text-sm text-text-primary truncate flex-1">{repo.name}</span>
+                <span onClick={() => toggleExpand(repo.id)} className="text-sm text-text-primary truncate flex-1 cursor-pointer">{repo.name}</span>
                 <button
                   onClick={() => setNewSessionRepoId(repo.id)}
                   disabled={creatingSessions.has(repo.id)}
