@@ -34,4 +34,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('terminal:data', listener)
     return () => ipcRenderer.removeListener('terminal:data', listener)
   },
+
+  // Menu
+  onMenuAbout: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('menu:about', listener)
+    return () => ipcRenderer.removeListener('menu:about', listener)
+  },
 })

@@ -46,6 +46,11 @@ export default function App() {
   }
 
   useEffect(() => {
+    const cleanup = window.electronAPI.onMenuAbout(() => setShowAbout(true))
+    return cleanup
+  }, [])
+
+  useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing.current || !containerRef.current) return
       const containerRect = containerRef.current.getBoundingClientRect()
