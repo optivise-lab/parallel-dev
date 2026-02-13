@@ -29,8 +29,6 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showCommitModal, setShowCommitModal] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
-  const [terminalHeight, setTerminalHeight] = useState(256)
-  const isResizing = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const activeState = openSessions.find(s => s.session.id === activeSessionId) ?? null
@@ -44,32 +42,6 @@ export default function App() {
     setOpenSessions(prev => prev.map(s =>
       s.session.id === sessionId ? updater(s) : s
     ))
-  }
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current || !containerRef.current) return
-      const containerRect = containerRef.current.getBoundingClientRect()
-      const newHeight = containerRect.bottom - e.clientY
-      setTerminalHeight(Math.max(100, Math.min(newHeight, containerRect.height - 100)))
-    }
-    const handleMouseUp = () => {
-      isResizing.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [])
-
-  const startResize = () => {
-    isResizing.current = true
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
   }
 
   const refreshStatus = useCallback(async () => {
@@ -245,60 +217,8 @@ export default function App() {
 
           {/* Content */}
           {activeSession ? (
-            <div ref={containerRef} className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 flex min-h-0">
-                <div className="flex-1 flex flex-col min-w-0">
-                  {/* File tabs */}
-                  {openTabs.length > 0 && (
-                    <div className="h-8 shrink-0 flex bg-bg-secondary border-b border-bg-tertiary overflow-auto">
-                      {openTabs.map(tab => (
-                        <div
-                          key={tab.filePath}
-                          onClick={() => updateSession(activeSession.id, s => ({ ...s, activeFileTab: tab.filePath }))}
-                          className={`flex items-center gap-[5px] px-2.5 text-[11px] font-mono cursor-pointer border-r border-bg-tertiary whitespace-nowrap ${
-                            activeTab === tab.filePath
-                              ? 'bg-bg-primary text-text-primary'
-                              : 'bg-transparent text-[#585b70]'
-                          }`}
-                        >
-                          <span>{fileName(tab.filePath)}</span>
-                          <button
-                            onClick={(e) => handleCloseFileTab(tab.filePath, e)}
-                            className="flex items-center justify-center w-3.5 h-3.5 rounded-sm border-none bg-transparent text-[#585b70] cursor-pointer p-0 hover:bg-bg-hover"
-                          >
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    {activeTabData ? (
-                      <DiffViewer diff={activeTabData.diff} fileName={activeTabData.filePath} />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-text-muted">
-                        <div className="text-center">
-                          <p className="text-lg mb-1">Session Active</p>
-                          <p className="text-[13px] font-mono">{activeSession.path}</p>
-                          <p className="text-xs mt-3 text-[#585b70]">Click a changed file to view diff</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="w-[280px] shrink-0 border-l border-border overflow-auto">
-                  <ChangedFiles changes={changes} onRefresh={refreshStatus} onFileClick={handleFileClick} />
-                </div>
-              </div>
-
-              <div
-                onMouseDown={startResize}
-                className="h-1 shrink-0 cursor-row-resize bg-border transition-colors duration-150 hover:bg-accent-blue"
-              />
-
-              <div className="shrink-0 pb-[30px]" style={{ height: terminalHeight }}>
+            <div ref={containerRef} className="flex-1 flex min-h-0 relative">
+              <div className="flex-1 min-w-0 pb-[30px]">
                 {openSessions.map(s => (
                   <div
                     key={s.session.id}
@@ -308,6 +228,39 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              <div className="w-[280px] shrink-0 border-l border-border overflow-auto">
+                <ChangedFiles changes={changes} onRefresh={refreshStatus} onFileClick={handleFileClick} />
+              </div>
+
+              {activeTabData && (
+                <div className="absolute inset-0 right-[280px] z-10 flex flex-col bg-bg-primary">
+                  <div className="h-8 shrink-0 flex bg-bg-secondary border-b border-bg-tertiary overflow-auto">
+                    {openTabs.map(tab => (
+                      <div
+                        key={tab.filePath}
+                        onClick={() => updateSession(activeSession.id, s => ({ ...s, activeFileTab: tab.filePath }))}
+                        className={`flex items-center gap-[5px] px-2.5 text-[11px] font-mono cursor-pointer border-r border-bg-tertiary whitespace-nowrap ${
+                          activeTab === tab.filePath
+                            ? 'bg-bg-primary text-text-primary'
+                            : 'bg-transparent text-[#585b70]'
+                        }`}
+                      >
+                        <span>{fileName(tab.filePath)}</span>
+                        <button
+                          onClick={(e) => handleCloseFileTab(tab.filePath, e)}
+                          className="flex items-center justify-center w-3.5 h-3.5 rounded-sm border-none bg-transparent text-[#585b70] cursor-pointer p-0 hover:bg-bg-hover"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <DiffViewer diff={activeTabData.diff} fileName={activeTabData.filePath} />
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-text-muted">

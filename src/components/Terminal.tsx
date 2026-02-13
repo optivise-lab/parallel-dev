@@ -41,7 +41,10 @@ export function Terminal({ session }: TerminalProps) {
     term.loadAddon(fitAddon)
     term.open(containerRef.current)
 
-    setTimeout(() => fitAddon.fit(), 100)
+    setTimeout(() => {
+      fitAddon.fit()
+      term.write('\x1b[' + term.rows + ';1H')
+    }, 100)
 
     termRef.current = term
     fitAddonRef.current = fitAddon
