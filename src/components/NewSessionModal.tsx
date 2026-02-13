@@ -1,16 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Loader2, GitBranch, ChevronDown, Search } from 'lucide-react'
-
-const RANDOM_NAMES = [
-  'organic', 'cosmic', 'stellar', 'amber', 'crystal', 'thunder', 'velvet', 'mystic',
-  'crimson', 'silver', 'golden', 'shadow', 'falcon', 'phoenix', 'dragon', 'glacier',
-  'summit', 'marble', 'ember', 'coral', 'breeze', 'aurora', 'nova', 'zenith',
-  'pulse', 'spark', 'flint', 'cedar', 'maple', 'orchid', 'lotus', 'sage',
-  'raven', 'wolf', 'hawk', 'lynx', 'panda', 'tiger', 'viper', 'cobra',
-  'iron', 'steel', 'copper', 'bronze', 'jade', 'onyx', 'opal', 'ruby',
-  'delta', 'omega', 'pixel', 'quartz', 'prism', 'sonic', 'turbo', 'rapid',
-  'blaze', 'frost', 'storm', 'surge', 'drift', 'orbit', 'comet', 'lunar',
-]
+import { RANDOM_NAMES } from '../shared/randomNames'
 
 interface NewSessionModalProps {
   repoName: string

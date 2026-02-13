@@ -4,37 +4,11 @@ import fs from 'node:fs'
 import { StoreService } from './store'
 import type { Repo, Session, FileChange } from './store'
 
-const RANDOM_NAMES = [
-  'organic', 'cosmic', 'stellar', 'amber', 'crystal', 'thunder', 'velvet', 'mystic',
-  'crimson', 'silver', 'golden', 'shadow', 'falcon', 'phoenix', 'dragon', 'glacier',
-  'summit', 'marble', 'ember', 'coral', 'breeze', 'aurora', 'nova', 'zenith',
-  'pulse', 'spark', 'flint', 'cedar', 'maple', 'orchid', 'lotus', 'sage',
-  'raven', 'wolf', 'hawk', 'lynx', 'panda', 'tiger', 'viper', 'cobra',
-  'iron', 'steel', 'copper', 'bronze', 'jade', 'onyx', 'opal', 'ruby',
-  'delta', 'omega', 'pixel', 'quartz', 'prism', 'sonic', 'turbo', 'rapid',
-  'blaze', 'frost', 'storm', 'surge', 'drift', 'orbit', 'comet', 'lunar',
-]
-
-function pickRandomName(): string {
-  return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
-}
-
 export class GitService {
   private store: StoreService
 
   constructor(store: StoreService) {
     this.store = store
-  }
-
-  private async getGitUsername(): Promise<string> {
-    const git = simpleGit()
-    try {
-      const name = await git.getConfig('user.name', 'global')
-      if (name.value) {
-        return name.value.toLowerCase().replace(/\s+/g, '')
-      }
-    } catch {}
-    return 'user'
   }
 
   private getWorkspaceDir(): string {
@@ -43,7 +17,21 @@ export class GitService {
     return dir
   }
 
+  getSessionPath(sessionId: string): string {
+    const session = this.store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    if (!fs.existsSync(session.path)) throw new Error('Session path does not exist')
+    return session.path
+  }
+
   async addRepo(repoUrl: string): Promise<Repo> {
+    if (
+      repoUrl.startsWith('-') ||
+      /[\s\x00-\x1f]/.test(repoUrl) ||
+      !/^(https?:\/\/|git@|ssh:\/\/)/.test(repoUrl)
+    ) {
+      throw new Error('Invalid repository URL')
+    }
     const name = repoUrl.split('/').pop()?.replace('.git', '') || 'unknown'
     const repo: Repo = {
       id: crypto.randomUUID(),
@@ -105,10 +93,13 @@ export class GitService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    const sessions = this.store.getSessions('')
-    const allSessions = this.store.getRepos().flatMap(r => this.store.getSessions(r.id))
-    const session = allSessions.find(s => s.id === sessionId)
+    const session = this.store.getSessionById(sessionId)
     if (!session) throw new Error('Session not found')
+
+    const workspace = this.getWorkspaceDir()
+    if (!path.resolve(session.path).startsWith(path.resolve(workspace) + path.sep)) {
+      throw new Error('Refusing to delete outside workspace')
+    }
 
     if (fs.existsSync(session.path)) {
       fs.rmSync(session.path, { recursive: true, force: true })
@@ -137,14 +128,17 @@ export class GitService {
   }
 
   async getFileDiff(sessionPath: string, filePath: string): Promise<string> {
+    const resolved = path.resolve(sessionPath, filePath)
+    if (!resolved.startsWith(path.resolve(sessionPath) + path.sep)) {
+      throw new Error('Invalid file path')
+    }
     const git = simpleGit(sessionPath)
     try {
       const diff = await git.diff([filePath])
       if (diff) return diff
       const diffCached = await git.diff(['--cached', filePath])
       if (diffCached) return diffCached
-      // For untracked files, read the file content
-      const fullPath = path.join(sessionPath, filePath)
+      const fullPath = resolved
       if (fs.existsSync(fullPath)) {
         const content = fs.readFileSync(fullPath, 'utf-8')
         return content.split('\n').map(line => `+ ${line}`).join('\n')

@@ -46,7 +46,7 @@ export function Terminal({ session }: TerminalProps) {
     termRef.current = term
     fitAddonRef.current = fitAddon
 
-    window.electronAPI.createTerminal(session.id, session.path)
+    window.electronAPI.createTerminal(session.id)
 
     term.onData(data => {
       window.electronAPI.sendTerminalInput(session.id, data)
@@ -72,7 +72,7 @@ export function Terminal({ session }: TerminalProps) {
       window.electronAPI.killTerminal(session.id)
       term.dispose()
     }
-  }, [session.id])
+  }, [session.id, session.path])
 
   return (
     <div

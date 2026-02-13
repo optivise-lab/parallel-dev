@@ -35,10 +35,10 @@ export interface ElectronAPI {
   createSession: (repoId: string, branchName: string, baseBranch?: string) => Promise<Session>
   listSessions: (repoId: string) => Promise<Session[]>
   deleteSession: (sessionId: string) => Promise<void>
-  getStatus: (sessionPath: string) => Promise<FileChange[]>
-  getFileDiff: (sessionPath: string, filePath: string) => Promise<string>
-  commitAndPush: (sessionPath: string, message: string) => Promise<void>
-  createTerminal: (sessionId: string, sessionPath: string) => void
+  getStatus: (sessionId: string) => Promise<FileChange[]>
+  getFileDiff: (sessionId: string, filePath: string) => Promise<string>
+  commitAndPush: (sessionId: string, message: string) => Promise<void>
+  createTerminal: (sessionId: string) => void
   sendTerminalInput: (sessionId: string, data: string) => void
   resizeTerminal: (sessionId: string, cols: number, rows: number) => void
   killTerminal: (sessionId: string) => void

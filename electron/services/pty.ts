@@ -1,4 +1,5 @@
 export class PtyService {
+  // any is intentional — node-pty is dynamically required to handle missing native modules
   private process: any
 
   constructor(cwd: string, onData: (data: string) => void) {

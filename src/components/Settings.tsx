@@ -11,7 +11,7 @@ export function Settings({ onClose }: SettingsProps) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    window.electronAPI.getSettings().then(setSettings)
+    window.electronAPI.getSettings().then(setSettings).catch(err => console.error('Failed to load settings:', err))
   }, [])
 
   const handlePickFolder = async () => {

@@ -24,26 +24,20 @@ export function DiffViewer({ diff, fileName }: DiffViewerProps) {
       })
   }, [diff])
 
-  const colors = {
-    add: { bg: 'rgba(166, 227, 161, 0.1)', color: '#a6e3a1' },
-    remove: { bg: 'rgba(243, 139, 168, 0.1)', color: '#f38ba8' },
-    header: { bg: 'rgba(137, 180, 250, 0.08)', color: '#89b4fa' },
-    normal: { bg: 'transparent', color: '#cdd6f4' },
+  const typeClasses = {
+    add: 'bg-accent-green/10 text-accent-green',
+    remove: 'bg-accent-red/10 text-accent-red',
+    header: 'bg-accent-blue/[0.08] text-accent-blue',
+    normal: 'bg-transparent text-text-primary',
   }
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: '#1e1e2e' }}>
-      <div style={{ padding: '8px 0', fontFamily: 'Menlo, Monaco, "Courier New", monospace', fontSize: 13, lineHeight: '20px' }}>
+    <div className="h-full overflow-auto bg-bg-primary">
+      <div className="py-2 font-mono text-[13px] leading-5">
         {lines.map(line => (
           <div
             key={line.key}
-            style={{
-              padding: '0 16px',
-              background: colors[line.type].bg,
-              color: colors[line.type].color,
-              whiteSpace: 'pre',
-              minHeight: 20,
-            }}
+            className={`px-4 whitespace-pre min-h-[20px] ${typeClasses[line.type]}`}
           >
             {line.text || ' '}
           </div>

@@ -27,8 +27,12 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   })
+
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -48,6 +52,11 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
   }
+})
+
+app.on('before-quit', () => {
+  for (const pty of ptyServices.values()) pty.kill()
+  ptyServices.clear()
 })
 
 app.whenReady().then(() => {
@@ -169,24 +178,35 @@ app.whenReady().then(() => {
   })
 
   // Git operations
-  ipcMain.handle('git:status', async (_event, sessionPath: string) => {
-    return gitService.getStatus(sessionPath)
+  ipcMain.handle('git:status', async (_event, sessionId: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    return gitService.getStatus(session.path)
   })
-  ipcMain.handle('git:diff', async (_event, sessionPath: string, filePath: string) => {
-    return gitService.getFileDiff(sessionPath, filePath)
+  ipcMain.handle('git:diff', async (_event, sessionId: string, filePath: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    return gitService.getFileDiff(session.path, filePath)
   })
-  ipcMain.handle('git:commitAndPush', async (_event, sessionPath: string, message: string) => {
-    return gitService.commitAndPush(sessionPath, message)
+  ipcMain.handle('git:commitAndPush', async (_event, sessionId: string, message: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    return gitService.commitAndPush(session.path, message)
   })
 
   // Terminal
-  ipcMain.on('terminal:create', (_event, sessionId: string, sessionPath: string) => {
+  ipcMain.on('terminal:create', (_event, sessionId: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) {
+      win?.webContents.send('terminal:data', sessionId, `\r\nSession not found\r\n`)
+      return
+    }
     try {
       const existing = ptyServices.get(sessionId)
       if (existing) {
         existing.kill()
       }
-      const pty = new PtyService(sessionPath, (data: string) => {
+      const pty = new PtyService(session.path, (data: string) => {
         win?.webContents.send('terminal:data', sessionId, data)
       })
       ptyServices.set(sessionId, pty)

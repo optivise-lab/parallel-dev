@@ -32,11 +32,15 @@ export function Sidebar({ onSessionSelect, activeSessionId, runningSessions, onS
   }, [])
 
   const loadRepos = async () => {
-    const repos = await window.electronAPI.listRepos()
-    setRepos(repos)
-    for (const repo of repos) {
-      const repoSessions = await window.electronAPI.listSessions(repo.id)
-      setSessions(prev => ({ ...prev, [repo.id]: repoSessions }))
+    try {
+      const repos = await window.electronAPI.listRepos()
+      setRepos(repos)
+      for (const repo of repos) {
+        const repoSessions = await window.electronAPI.listSessions(repo.id)
+        setSessions(prev => ({ ...prev, [repo.id]: repoSessions }))
+      }
+    } catch (err) {
+      console.error('Failed to load repos:', err)
     }
   }
 

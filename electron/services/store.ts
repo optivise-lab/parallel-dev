@@ -44,7 +44,15 @@ export class StoreService {
       workspacePath: path.join(os.homedir(), '.paralleldev', 'sessions'),
     }
     if (fs.existsSync(STORE_PATH)) {
-      this.data = JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'))
+      try {
+        this.data = JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'))
+      } catch {
+        const backup = STORE_PATH + '.corrupt.' + Date.now()
+        fs.copyFileSync(STORE_PATH, backup)
+        this.data = { repos: [], sessions: [], settings: defaultSettings }
+        this.save()
+        return
+      }
       if (!this.data.settings) {
         this.data.settings = defaultSettings
         this.save()
@@ -96,7 +104,17 @@ export class StoreService {
     return this.data.settings
   }
 
+  getSessionById(id: string): Session | undefined {
+    return this.data.sessions.find(s => s.id === id)
+  }
+
   updateSettings(settings: Partial<Settings>) {
+    if (settings.workspacePath !== undefined) {
+      const p = settings.workspacePath
+      if (!p || p === '/' || p.length < 5) {
+        throw new Error('Invalid workspace path')
+      }
+    }
     this.data.settings = { ...this.data.settings, ...settings }
     this.save()
     return this.data.settings
