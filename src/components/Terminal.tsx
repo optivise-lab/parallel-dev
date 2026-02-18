@@ -6,9 +6,11 @@ import type { Session } from '../types'
 
 interface TerminalProps {
   session: Session
+  terminalId?: string
 }
 
-export function Terminal({ session }: TerminalProps) {
+export function Terminal({ session, terminalId }: TerminalProps) {
+  const id = terminalId || session.id
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -49,20 +51,20 @@ export function Terminal({ session }: TerminalProps) {
     termRef.current = term
     fitAddonRef.current = fitAddon
 
-    window.electronAPI.createTerminal(session.id)
+    window.electronAPI.createTerminal(id, session.id)
 
     term.onData(data => {
-      window.electronAPI.sendTerminalInput(session.id, data)
+      window.electronAPI.sendTerminalInput(id, data)
     })
 
-    const removeListener = window.electronAPI.onTerminalData((sessionId, data) => {
-      if (sessionId === session.id) {
+    const removeListener = window.electronAPI.onTerminalData((terminalId, data) => {
+      if (terminalId === id) {
         term.write(data)
       }
     })
 
     term.onResize(({ cols, rows }) => {
-      window.electronAPI.resizeTerminal(session.id, cols, rows)
+      window.electronAPI.resizeTerminal(id, cols, rows)
     })
 
     const handleResize = () => fitAddon.fit()
@@ -72,10 +74,10 @@ export function Terminal({ session }: TerminalProps) {
     return () => {
       observer.disconnect()
       removeListener()
-      window.electronAPI.killTerminal(session.id)
+      window.electronAPI.killTerminal(id)
       term.dispose()
     }
-  }, [session.id, session.path])
+  }, [id, session.path])
 
   return (
     <div

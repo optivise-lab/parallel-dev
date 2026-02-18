@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, FolderOpen } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, FolderOpen, User } from 'lucide-react'
 import type { Settings as SettingsType } from '../types'
 
 interface SettingsProps {
@@ -9,10 +9,25 @@ interface SettingsProps {
 export function Settings({ onClose }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsType | null>(null)
   const [saving, setSaving] = useState(false)
+  const [usernameInput, setUsernameInput] = useState('')
+  const usernameTimeout = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
-    window.electronAPI.getSettings().then(setSettings).catch(err => console.error('Failed to load settings:', err))
+    window.electronAPI.getSettings().then(s => {
+      setSettings(s)
+      setUsernameInput(s.username || '')
+    }).catch(err => console.error('Failed to load settings:', err))
   }, [])
+
+  const handleUsernameChange = (value: string) => {
+    const sanitized = value.toLowerCase().replace(/[^a-z0-9._-]/g, '')
+    setUsernameInput(sanitized)
+    clearTimeout(usernameTimeout.current)
+    usernameTimeout.current = setTimeout(async () => {
+      const updated = await window.electronAPI.updateSettings({ username: sanitized })
+      setSettings(updated)
+    }, 500)
+  }
 
   const handlePickFolder = async () => {
     const folder = await window.electronAPI.pickFolder()
@@ -40,6 +55,22 @@ export function Settings({ onClose }: SettingsProps) {
         </div>
 
         <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
+              <span className="flex items-center gap-1.5"><User size={12} /> Username</span>
+            </label>
+            <p className="text-xs text-text-muted mb-3">
+              Used as branch name prefix (e.g. {usernameInput || 'username'}/branch-name).
+            </p>
+            <input
+              type="text"
+              value={usernameInput}
+              onChange={e => handleUsernameChange(e.target.value)}
+              placeholder="e.g. emran"
+              className="w-full bg-bg-tertiary text-text-primary text-sm rounded px-3 py-2 outline-none focus:ring-1 focus:ring-accent-blue placeholder-text-muted border border-border font-mono"
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
               Workspace Directory

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, GitBranch, Trash2, Loader2, ChevronDown, ChevronRight, Circle } from 'lucide-react'
 import { NewSessionModal } from './NewSessionModal'
 import type { Repo, Session } from '../types'
@@ -26,10 +26,23 @@ export function Sidebar({ onSessionSelect, activeSessionId, runningSessions, onS
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [newSessionRepoId, setNewSessionRepoId] = useState<string | null>(null)
+  const sidebarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadRepos()
   }, [])
+
+  useEffect(() => {
+    if (!showAddRepo) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setShowAddRepo(false)
+        setRepoUrl('')
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside, true)
+    return () => window.removeEventListener('mousedown', handleClickOutside, true)
+  }, [showAddRepo])
 
   const loadRepos = async () => {
     try {
@@ -116,7 +129,7 @@ export function Sidebar({ onSessionSelect, activeSessionId, runningSessions, onS
 
   return (
     <>
-      <div className="w-64 bg-bg-secondary border-r border-border flex flex-col h-full">
+      <div className="bg-bg-secondary border-r border-border flex flex-col h-full w-full">
         <div className="h-12 flex items-center px-20 border-b border-border app-drag">
           <span className="text-sm font-bold text-accent-blue tracking-wide">ParallelDev</span>
         </div>
@@ -131,12 +144,15 @@ export function Sidebar({ onSessionSelect, activeSessionId, runningSessions, onS
         </div>
 
         {showAddRepo && (
-          <div className="p-3 border-b border-border">
+          <div ref={sidebarRef} className="p-3 border-b border-border">
             <input
               type="text"
               value={repoUrl}
               onChange={e => setRepoUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddRepo()}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAddRepo()
+                if (e.key === 'Escape') { setShowAddRepo(false); setRepoUrl('') }
+              }}
               placeholder="https://github.com/user/repo.git"
               className="w-full bg-bg-tertiary text-text-primary text-sm rounded px-3 py-2 outline-none focus:ring-1 focus:ring-accent-blue placeholder-text-muted"
               autoFocus

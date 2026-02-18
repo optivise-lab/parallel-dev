@@ -25,12 +25,14 @@ export interface FileChange {
 
 export interface Settings {
   workspacePath: string
+  username: string
 }
 
 interface StoreData {
   repos: Repo[]
   sessions: Session[]
   settings: Settings
+  branchCache: Record<string, { branches: string[], updatedAt: number }>
 }
 
 const STORE_PATH = path.join(os.homedir(), '.paralleldev', 'store.json')
@@ -42,6 +44,7 @@ export class StoreService {
     fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true })
     const defaultSettings: Settings = {
       workspacePath: path.join(os.homedir(), '.paralleldev', 'sessions'),
+      username: '',
     }
     if (fs.existsSync(STORE_PATH)) {
       try {
@@ -49,7 +52,7 @@ export class StoreService {
       } catch {
         const backup = STORE_PATH + '.corrupt.' + Date.now()
         fs.copyFileSync(STORE_PATH, backup)
-        this.data = { repos: [], sessions: [], settings: defaultSettings }
+        this.data = { repos: [], sessions: [], settings: defaultSettings, branchCache: {} }
         this.save()
         return
       }
@@ -57,8 +60,14 @@ export class StoreService {
         this.data.settings = defaultSettings
         this.save()
       }
+      if (this.data.settings.username === undefined) {
+        this.data.settings.username = ''
+      }
+      if (!this.data.branchCache) {
+        this.data.branchCache = {}
+      }
     } else {
-      this.data = { repos: [], sessions: [], settings: defaultSettings }
+      this.data = { repos: [], sessions: [], settings: defaultSettings, branchCache: {} }
       this.save()
     }
   }
@@ -106,6 +115,15 @@ export class StoreService {
 
   getSessionById(id: string): Session | undefined {
     return this.data.sessions.find(s => s.id === id)
+  }
+
+  getCachedBranches(repoUrl: string): string[] {
+    return this.data.branchCache[repoUrl]?.branches ?? []
+  }
+
+  setCachedBranches(repoUrl: string, branches: string[]) {
+    this.data.branchCache[repoUrl] = { branches, updatedAt: Date.now() }
+    this.save()
   }
 
   updateSettings(settings: Partial<Settings>) {

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { X, Loader2, GitBranch, ChevronDown, Search } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Loader2, GitBranch, ChevronDown, Search, RefreshCw } from 'lucide-react'
 import { RANDOM_NAMES } from '../shared/randomNames'
 
 interface NewSessionModalProps {
@@ -9,16 +9,29 @@ interface NewSessionModalProps {
   onClose: () => void
 }
 
+function useDebounce(value: string, delay: number): string {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
 export function NewSessionModal({ repoName, repoUrl, onConfirm, onClose }: NewSessionModalProps) {
   const [branchName, setBranchName] = useState('')
+  const [username, setUsername] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [branches, setBranches] = useState<string[]>([])
-  const [loadingBranches, setLoadingBranches] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const hasSynced = useRef(false)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [branchSearch, setBranchSearch] = useState('')
   const [showBranchDropdown, setShowBranchDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const debouncedSearch = useDebounce(branchSearch, 300)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -31,37 +44,53 @@ export function NewSessionModal({ repoName, repoUrl, onConfirm, onClose }: NewSe
   }, [])
 
   const filteredBranches = branches.filter(b =>
-    b.toLowerCase().includes(branchSearch.toLowerCase())
+    b.toLowerCase().includes(debouncedSearch.toLowerCase())
   )
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const result = await window.electronAPI.listBranches(repoUrl)
-        const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
-        setBranchName(randomName)
-        setBranches(result.branches)
-        setBaseBranch(result.defaultBranch)
-      } catch (err: any) {
-        console.error('Failed to load branches:', err)
-        setError(err?.message || 'Failed to load branches')
-        const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
-        setBranchName(randomName)
-        setBranches(['main', 'master'])
-        setBaseBranch('main')
-      } finally {
-        setLoadingBranches(false)
-      }
+  const syncBranches = useCallback(async () => {
+    setSyncing(true)
+    try {
+      const result = await window.electronAPI.syncBranches(repoUrl)
+      setBranches(result.branches)
+      if (!baseBranch) setBaseBranch(result.defaultBranch)
+    } catch (err: any) {
+      console.error('Failed to sync branches:', err)
+    } finally {
+      setSyncing(false)
     }
-    load()
+  }, [repoUrl, baseBranch])
+
+  useEffect(() => {
+    window.electronAPI.getSettings().then(s => {
+      if (s.username) setUsername(s.username)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
+    setBranchName(randomName)
+    window.electronAPI.getCachedBranches(repoUrl).then(cached => {
+      if (cached.length > 0) {
+        setBranches(cached)
+        if (!baseBranch) setBaseBranch(cached.includes('main') ? 'main' : cached[0])
+      }
+    }).catch(() => {})
   }, [repoUrl])
+
+  useEffect(() => {
+    if (!debouncedSearch || hasSynced.current) return
+    hasSynced.current = true
+    syncBranches()
+  }, [debouncedSearch, syncBranches])
+
+  const fullBranchName = username ? `${username}/${branchName.trim()}` : branchName.trim()
 
   const handleConfirm = async () => {
     if (!branchName.trim() || !baseBranch) return
     setIsCreating(true)
     setError(null)
     try {
-      await onConfirm(branchName.trim(), baseBranch)
+      await onConfirm(fullBranchName, baseBranch)
       onClose()
     } catch (err: any) {
       setError(err?.message || 'Failed to create session')
@@ -93,72 +122,75 @@ export function NewSessionModal({ repoName, repoUrl, onConfirm, onClose }: NewSe
             <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
               Clone From Branch
             </label>
-            {loadingBranches ? (
-              <div className="flex items-center gap-2 text-text-muted text-sm py-2">
-                <Loader2 size={14} className="animate-spin" />
-                Loading branches...
-              </div>
-            ) : (
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => { setShowBranchDropdown(!showBranchDropdown); setBranchSearch('') }}
-                  className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-mono border border-border cursor-pointer"
-                  style={{ background: '#313244', color: '#cdd6f4' }}
-                >
-                  <span className="truncate">{baseBranch || 'Select branch...'}</span>
-                  <ChevronDown size={14} className="text-text-muted shrink-0 ml-2" />
-                </button>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => { setShowBranchDropdown(!showBranchDropdown); setBranchSearch('') }}
+                className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-mono border border-border cursor-pointer"
+                style={{ background: '#313244', color: '#cdd6f4' }}
+              >
+                <span className="truncate flex items-center gap-2">
+                  {baseBranch || 'Select branch...'}
+                  {syncing && <RefreshCw size={12} className="animate-spin text-text-muted" />}
+                </span>
+                <ChevronDown size={14} className="text-text-muted shrink-0 ml-2" />
+              </button>
 
-                {showBranchDropdown && (
-                  <div className="absolute z-50 mt-1 w-full rounded border border-border shadow-xl" style={{ background: '#313244' }}>
-                    <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                      <Search size={13} className="text-text-muted shrink-0" />
-                      <input
-                        type="text"
-                        value={branchSearch}
-                        onChange={e => setBranchSearch(e.target.value)}
-                        placeholder="Search branches..."
-                        className="w-full bg-transparent text-sm text-text-primary outline-none placeholder-text-muted font-mono"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {filteredBranches.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-text-muted">No branches found</div>
-                      ) : (
-                        filteredBranches.map(b => (
-                          <button
-                            key={b}
-                            type="button"
-                            onClick={() => { setBaseBranch(b); setShowBranchDropdown(false) }}
-                            className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-bg-hover transition-colors"
-                            style={{ color: b === baseBranch ? '#89b4fa' : '#cdd6f4' }}
-                          >
-                            {b}
-                          </button>
-                        ))
-                      )}
-                    </div>
+              {showBranchDropdown && (
+                <div className="absolute z-50 mt-1 w-full rounded border border-border shadow-xl" style={{ background: '#313244' }}>
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                    <Search size={13} className="text-text-muted shrink-0" />
+                    <input
+                      type="text"
+                      value={branchSearch}
+                      onChange={e => setBranchSearch(e.target.value)}
+                      placeholder="Search branches..."
+                      className="w-full bg-transparent text-sm text-text-primary outline-none placeholder-text-muted font-mono"
+                      autoFocus
+                    />
+                    {syncing && <Loader2 size={13} className="animate-spin text-text-muted shrink-0" />}
                   </div>
-                )}
-              </div>
-            )}
+                  <div className="max-h-48 overflow-y-auto">
+                    {filteredBranches.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-text-muted">No branches found</div>
+                    ) : (
+                      filteredBranches.map(b => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => { setBaseBranch(b); setShowBranchDropdown(false) }}
+                          className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-bg-hover transition-colors"
+                          style={{ color: b === baseBranch ? '#89b4fa' : '#cdd6f4' }}
+                        >
+                          {b}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
               New Branch Name
             </label>
-            <input
-              type="text"
-              value={branchName}
-              onChange={e => setBranchName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
-              className="w-full bg-bg-tertiary text-text-primary text-sm rounded px-3 py-2 outline-none focus:ring-1 focus:ring-accent-blue placeholder-text-muted border border-border font-mono"
-              placeholder="username/branch-name"
-              autoFocus
-            />
+            <div className="flex items-center bg-bg-tertiary rounded border border-border focus-within:ring-1 focus-within:ring-accent-blue">
+              {username && (
+                <span className="pl-3 text-sm font-mono text-text-muted shrink-0">{username}/</span>
+              )}
+              <input
+                type="text"
+                value={branchName}
+                onChange={e => setBranchName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
+                className="w-full bg-transparent text-text-primary text-sm py-2 px-3 outline-none placeholder-text-muted font-mono"
+                style={username ? { paddingLeft: 0 } : undefined}
+                placeholder="branch-name"
+                autoFocus
+              />
+            </div>
           </div>
 
           {error && (
@@ -173,7 +205,7 @@ export function NewSessionModal({ repoName, repoUrl, onConfirm, onClose }: NewSe
             </button>
             <button
               onClick={handleConfirm}
-              disabled={!branchName.trim() || !baseBranch || isCreating || loadingBranches}
+              disabled={!branchName.trim() || !baseBranch || isCreating}
               className="flex items-center gap-2 px-4 py-1.5 text-sm font-medium bg-accent-blue text-bg-primary rounded hover:opacity-90 disabled:opacity-30 transition-opacity"
             >
               {isCreating ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}

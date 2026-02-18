@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { Info, X, GitCommit, GitBranch } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef, MouseEvent as ReactMouseEvent } from 'react'
+import { Info, X, GitCommit, GitBranch, Settings as SettingsIcon } from 'lucide-react'
 import { Sidebar } from './components/Sidebar'
 import { Terminal } from './components/Terminal'
 import { ChangedFiles } from './components/ChangedFiles'
+import { SidePanel } from './components/SidePanel'
 import { Settings } from './components/Settings'
 import { About } from './components/About'
 import { DiffViewer } from './components/DiffViewer'
@@ -29,7 +30,48 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showCommitModal, setShowCommitModal] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [leftWidth, setLeftWidth] = useState(20)
+  const [rightWidth, setRightWidth] = useState(20)
   const containerRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef<'left' | 'right' | null>(null)
+  const dragStartX = useRef(0)
+  const dragStartW = useRef(0)
+
+  const onResizeStart = useCallback((side: 'left' | 'right', e: ReactMouseEvent) => {
+    e.preventDefault()
+    draggingRef.current = side
+    dragStartX.current = e.clientX
+    dragStartW.current = side === 'left' ? leftWidth : rightWidth
+
+    const onMove = (ev: globalThis.MouseEvent) => {
+      if (!draggingRef.current) return
+      const delta = ((ev.clientX - dragStartX.current) / window.innerWidth) * 100
+      if (draggingRef.current === 'left') {
+        setLeftWidth(Math.max(10, Math.min(40, dragStartW.current + delta)))
+      } else {
+        setRightWidth(Math.max(10, Math.min(40, dragStartW.current - delta)))
+      }
+    }
+
+    const onUp = () => {
+      draggingRef.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [leftWidth, rightWidth])
+
+  useEffect(() => {
+    window.electronAPI.getSettings().then(async (s) => {
+      if (s.username) return
+      const name = await window.electronAPI.getGitUsername()
+      if (name && name !== 'user') {
+        await window.electronAPI.updateSettings({ username: name })
+      }
+    }).catch(() => {})
+  }, [])
 
   const activeState = openSessions.find(s => s.session.id === activeSessionId) ?? null
   const activeSession = activeState?.session ?? null
@@ -83,6 +125,7 @@ export default function App() {
   const handleCloseSessionTab = (sessionId: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
     window.electronAPI.killTerminal(sessionId)
+    window.electronAPI.killTerminal(`${sessionId}:panel`)
     setOpenSessions(prev => prev.filter(s => s.session.id !== sessionId))
     setRunningSessions(prev => { const n = new Set(prev); n.delete(sessionId); return n })
     if (activeSessionId === sessionId) {
@@ -138,13 +181,14 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="flex w-screen h-screen overflow-hidden bg-bg-primary">
-        <div className="w-64 shrink-0">
+        <div className="shrink-0 h-full" style={{ width: `${leftWidth}%` }}>
           <Sidebar
             onSessionSelect={handleSessionSelect}
             activeSessionId={activeSessionId}
             runningSessions={runningSessions}
             onSessionDeleted={(id) => {
               window.electronAPI.killTerminal(id)
+              window.electronAPI.killTerminal(`${id}:panel`)
               setOpenSessions(prev => prev.filter(s => s.session.id !== id))
               setRunningSessions(prev => { const n = new Set(prev); n.delete(id); return n })
               if (activeSessionId === id) {
@@ -154,6 +198,10 @@ export default function App() {
             }}
           />
         </div>
+        <div
+          onMouseDown={(e) => onResizeStart('left', e)}
+          className="w-1 shrink-0 cursor-col-resize hover:bg-accent-blue/40 transition-colors"
+        />
 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top bar */}
@@ -167,6 +215,13 @@ export default function App() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 rounded border-none bg-transparent text-text-secondary cursor-pointer hover:text-text-primary transition-colors"
+                title="Settings"
+              >
+                <SettingsIcon size={16} />
+              </button>
               <button
                 onClick={() => setShowAbout(true)}
                 className="p-2 rounded border-none bg-transparent text-text-secondary cursor-pointer hover:text-text-primary transition-colors"
@@ -195,7 +250,10 @@ export default function App() {
               {openSessions.map(s => (
                 <div
                   key={s.session.id}
-                  onClick={() => setActiveSessionId(s.session.id)}
+                  onClick={() => {
+                    setActiveSessionId(s.session.id)
+                    updateSession(s.session.id, st => ({ ...st, fileTabs: [], activeFileTab: null }))
+                  }}
                   className={`flex items-center gap-1.5 px-3 text-xs cursor-pointer border-r border-bg-tertiary whitespace-nowrap ${
                     activeSessionId === s.session.id
                       ? 'bg-bg-primary text-accent-mauve'
@@ -229,12 +287,19 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="w-[280px] shrink-0 border-l border-border overflow-auto">
-                <ChangedFiles changes={changes} onRefresh={refreshStatus} onFileClick={handleFileClick} />
+              <div
+                onMouseDown={(e) => onResizeStart('right', e)}
+                className="w-1 shrink-0 cursor-col-resize hover:bg-accent-blue/40 transition-colors"
+              />
+              <div className="shrink-0 border-l border-border flex flex-col" style={{ width: `${rightWidth}vw` }}>
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <ChangedFiles changes={changes} onRefresh={refreshStatus} onFileClick={handleFileClick} />
+                </div>
+                <SidePanel session={activeSession} />
               </div>
 
               {activeTabData && (
-                <div className="absolute inset-0 right-[280px] z-10 flex flex-col bg-bg-primary">
+                <div className="absolute inset-0 z-10 flex flex-col bg-bg-primary" style={{ right: `calc(${rightWidth}vw + 4px)` }}>
                   <div className="h-8 shrink-0 flex bg-bg-secondary border-b border-bg-tertiary overflow-auto">
                     {openTabs.map(tab => (
                       <div

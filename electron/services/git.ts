@@ -80,6 +80,12 @@ export class GitService {
 
     await sessionGit.checkoutLocalBranch(branchName)
 
+    const envExample = path.join(sessionDir, '.env.example')
+    const envFile = path.join(sessionDir, '.env')
+    if (fs.existsSync(envExample) && !fs.existsSync(envFile)) {
+      fs.copyFileSync(envExample, envFile)
+    }
+
     const session: Session = {
       id: crypto.randomUUID(),
       repoId,

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import path from 'node:path'
+import fs from 'node:fs'
 import simpleGit from 'simple-git'
 import { GitService } from './services/git'
 import { StoreService } from './services/store'
@@ -167,6 +168,14 @@ app.whenReady().then(() => {
   ipcMain.handle('repo:branches', async (_event, repoUrl: string) => {
     return gitService.listRemoteBranches(repoUrl)
   })
+  ipcMain.handle('branches:getCached', (_event, repoUrl: string) => {
+    return store.getCachedBranches(repoUrl)
+  })
+  ipcMain.handle('branches:sync', async (_event, repoUrl: string) => {
+    const result = await gitService.listRemoteBranches(repoUrl)
+    store.setCachedBranches(repoUrl, result.branches)
+    return { branches: result.branches, defaultBranch: result.defaultBranch }
+  })
   ipcMain.handle('session:create', async (_event, repoId: string, branchName: string, baseBranch?: string) => {
     return gitService.createSession(repoId, branchName, baseBranch)
   })
@@ -194,38 +203,55 @@ app.whenReady().then(() => {
     return gitService.commitAndPush(session.path, message)
   })
 
+  // Env file
+  ipcMain.handle('env:read', async (_event, sessionId: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    const envPath = path.join(session.path, '.env')
+    if (fs.existsSync(envPath)) {
+      return fs.readFileSync(envPath, 'utf-8')
+    }
+    return ''
+  })
+  ipcMain.handle('env:write', async (_event, sessionId: string, content: string) => {
+    const session = store.getSessionById(sessionId)
+    if (!session) throw new Error('Session not found')
+    const envPath = path.join(session.path, '.env')
+    fs.writeFileSync(envPath, content, 'utf-8')
+  })
+
   // Terminal
-  ipcMain.on('terminal:create', (_event, sessionId: string) => {
+  ipcMain.on('terminal:create', (_event, terminalId: string, sessionId: string) => {
     const session = store.getSessionById(sessionId)
     if (!session) {
-      win?.webContents.send('terminal:data', sessionId, `\r\nSession not found\r\n`)
+      win?.webContents.send('terminal:data', terminalId, `\r\nSession not found\r\n`)
       return
     }
     try {
-      const existing = ptyServices.get(sessionId)
+      const existing = ptyServices.get(terminalId)
       if (existing) {
         existing.kill()
       }
       const pty = new PtyService(session.path, (data: string) => {
-        win?.webContents.send('terminal:data', sessionId, data)
+        win?.webContents.send('terminal:data', terminalId, data)
       })
-      ptyServices.set(sessionId, pty)
+      ptyServices.set(terminalId, pty)
     } catch (err) {
       console.error('terminal:create failed:', err)
-      win?.webContents.send('terminal:data', sessionId, `\r\nFailed to create terminal: ${err}\r\n`)
+      win?.webContents.send('terminal:data', terminalId, `\r\nFailed to create terminal: ${err}\r\n`)
     }
   })
 
-  ipcMain.on('terminal:input', (_event, sessionId: string, data: string) => {
-    ptyServices.get(sessionId)?.write(data)
+  ipcMain.on('terminal:input', (_event, terminalId: string, data: string) => {
+    ptyServices.get(terminalId)?.write(data)
   })
 
-  ipcMain.on('terminal:resize', (_event, sessionId: string, cols: number, rows: number) => {
-    ptyServices.get(sessionId)?.resize(cols, rows)
+  ipcMain.on('terminal:resize', (_event, terminalId: string, cols: number, rows: number) => {
+    ptyServices.get(terminalId)?.resize(cols, rows)
   })
 
-  ipcMain.on('terminal:kill', (_event, sessionId: string) => {
-    ptyServices.get(sessionId)?.kill()
-    ptyServices.delete(sessionId)
+  ipcMain.on('terminal:kill', (_event, terminalId: string) => {
+    ptyServices.get(terminalId)?.kill()
+    ptyServices.delete(terminalId)
   })
 })
